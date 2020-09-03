@@ -113,6 +113,7 @@ times p q =
 
 
 
+-- Possible Extensions
 -- Calculus
 -- derive, integrate
 -- Quality of Life

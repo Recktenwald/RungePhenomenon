@@ -3,7 +3,6 @@ module Runge exposing (Model, main)
 import Array exposing (Array)
 import Browser
 import Color
-import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -27,7 +26,6 @@ import LineChart.Junk as Junk
 import LineChart.Legends as Legends
 import LineChart.Line as Line
 import List
-import Polynomials
 import Svg
 
 
@@ -43,19 +41,47 @@ main =
 type Msg
     = Increment
     | Decrement
+    | ChangeNodes
 
 
 
 -- MODEL
 
 
+type Nodetype
+    = Uniform
+    | Chebyshev
+
+
+other : Nodetype -> Nodetype
+other nt =
+    case nt of
+        Uniform ->
+            Chebyshev
+
+        Chebyshev ->
+            Uniform
+
+
+showNodeType : Nodetype -> String
+showNodeType nt =
+    case nt of
+        Uniform ->
+            "Equidistributed interpolation nodes"
+
+        Chebyshev ->
+            "Chebyshev nodes"
+
+
 type alias Model =
-    { graph : List Float, nodes : List Float }
+    { graph : List Float
+    , xs : List Float
+    , nodetype : Nodetype
+    }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    --( [ 0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
     let
         n =
             60
@@ -68,6 +94,7 @@ init _ =
             |> List.map (\x -> x / n)
         )
         (equispaced -1 1 m)
+        Uniform
     , Cmd.none
     )
 
@@ -85,21 +112,35 @@ equispaced a b n =
 
 
 
-{--( List.range 0 1
-        |> List.map toFloat
-        |> List.map ((/) 1)
-    , Cmd.none
-    ) --}
+-- This function should be improved to return chebyshev nodes on an interval [a,b]
+
+
+chebyshevs : Float -> Float -> Int -> List Float
+chebyshevs _ _ n =
+    List.range 1 n
+        |> List.map (\x -> cos ((2.0 * toFloat x - 1.0) / (2.0 * toFloat n) * pi))
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        ( nodeFunction, otherNodeFunction ) =
+            case model.nodetype of
+                Uniform ->
+                    ( equispaced, chebyshevs )
+
+                Chebyshev ->
+                    ( chebyshevs, equispaced )
+    in
     case msg of
         Increment ->
-            ( { model | nodes = equispaced -1 1 (List.length model.nodes + 1) }, Cmd.none )
+            ( { model | xs = nodeFunction -1 1 (List.length model.xs + 1) }, Cmd.none )
 
         Decrement ->
-            ( { model | nodes = equispaced -1 1 (List.length model.nodes - 1) }, Cmd.none )
+            ( { model | xs = nodeFunction -1 1 (List.length model.xs - 1) }, Cmd.none )
+
+        ChangeNodes ->
+            ( { model | xs = otherNodeFunction -1 1 (List.length model.xs), nodetype = other model.nodetype }, Cmd.none )
 
 
 rungeFun : Float -> Float
@@ -157,18 +198,20 @@ view model =
     div []
         [ LineChart.viewCustom chartConfig
             ([ LineChart.line Color.black Dots.none "Runge Function" (plot rungeFun model.graph)
-             , LineChart.line Color.blue Dots.none "Interpolation" (plot (interpolynomEval model.nodes rungeFun) model.graph)
+             , LineChart.line Color.blue Dots.none "Interpolation" (plot (interpolynomEval model.xs rungeFun) model.graph)
 
              --, LineChart.line Color.red Dots.square "" (plot rungeFun [ 0 ])
              --, LineChart.line Color.red Dots.none "Difference" (plot (absDiffFun sin rungeFun) model.graph)
              ]
-                ++ List.map (\x -> LineChart.line Color.red Dots.square "" (plot rungeFun [ x ])) model.nodes
+                ++ List.map (\x -> LineChart.line Color.red Dots.square "" (plot rungeFun [ x ])) model.xs
             )
         , div []
             [ button [ onClick Increment ] [ text "+" ]
-            , div [] [ text (String.fromInt (List.length model.nodes)) ]
+            , div [] [ text (String.fromInt (List.length model.xs)) ]
             , button [ onClick Decrement ] [ text "-" ]
             ]
+        , button [ onClick ChangeNodes ] [ text "Change Node Type" ]
+        , text (showNodeType model.nodetype)
         ]
 
 
